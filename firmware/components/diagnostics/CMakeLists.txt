@@ -1,13 +1,12 @@
 idf_component_register(
     SRCS
-        "src/board.c"
-        "src/board_gpio.c"
+        "src/diagnostics.c"
 
     INCLUDE_DIRS
         "include"
 
     REQUIRES
-        esp_driver_gpio
+        common
         esp_system
         esp_hw_support
         spi_flash

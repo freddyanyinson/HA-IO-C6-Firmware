@@ -10,11 +10,15 @@ extern "C" {
 
 esp_err_t board_init(void);
 
-esp_err_t board_led_set(bool state);
+/* LED */
+esp_err_t board_led_init(void);
+esp_err_t board_led_on(void);
+esp_err_t board_led_off(void);
+esp_err_t board_led_toggle(void);
 
+/* BUTTON */
+esp_err_t board_button_init(void);
 bool board_button_read(void);
-
-const char *board_name(void);
 
 #ifdef __cplusplus
 }
