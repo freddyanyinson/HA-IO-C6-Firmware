@@ -1,9 +1,11 @@
-
-
-
-
 idf_component_register(
-    SRCS "src/core.c"
-    INCLUDE_DIRS "include"
-    REQUIRES common
+    SRCS
+        "src/core.c"
+
+    INCLUDE_DIRS
+        "include"
+
+    REQUIRES
+        common
+        board
 )
