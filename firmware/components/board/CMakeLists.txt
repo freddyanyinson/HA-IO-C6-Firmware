@@ -2,6 +2,8 @@ idf_component_register(
     SRCS
         "src/board.c"
         "src/board_gpio.c"
+        "src/board_led.c"
+        "src/board_button.c"
 
     INCLUDE_DIRS
         "include"

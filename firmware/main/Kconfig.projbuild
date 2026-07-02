@@ -1,0 +1,10 @@
+menu "HA-IO C6"
+
+    config EXAMPLE_LIGHT_GPIO
+        int "On/off light output GPIO"
+        default 17
+        range 0 30
+        help
+            GPIO used by the Zigbee On/Off cluster output on the XIAO ESP32-C6.
+
+endmenu

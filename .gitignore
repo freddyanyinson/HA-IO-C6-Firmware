@@ -9,6 +9,7 @@ managed_components/
 
 # Logs
 *.log
+ninja_manual.txt
 
 # Python
 __pycache__/
