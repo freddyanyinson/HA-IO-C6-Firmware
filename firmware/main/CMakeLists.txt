@@ -5,5 +5,6 @@ idf_component_register(
         nvs_flash
         esp_driver_gpio
         ieee802154
+        board
         diagnostics
 )

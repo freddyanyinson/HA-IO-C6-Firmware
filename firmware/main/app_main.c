@@ -3,6 +3,7 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "board_button.h"
 #include "diagnostics.h"
 #include "ha/esp_zigbee_ha_standard.h"
 #include "zcl_utility.h"
@@ -11,10 +12,42 @@
 
 static const char *TAG = "ESP_ZB_ON_OFF_LIGHT";
 
+#define BUTTON_POLL_MS             50
+#define BUTTON_DEBOUNCE_MS         50
+#define BUTTON_FACTORY_RESET_MS    5000
+
+static bool s_button_task_started = false;
+
+static void button_task(void *pvParameters);
+
 static esp_err_t deferred_driver_init(void)
 {
     light_driver_init(false);
+    if (!s_button_task_started) {
+        xTaskCreate(button_task, "button", 3072, NULL, 6, NULL);
+        s_button_task_started = true;
+    }
     return ESP_OK;
+}
+
+static void set_light_power(bool power, bool update_zigbee_attribute)
+{
+    light_driver_set_power(power);
+
+    if (update_zigbee_attribute) {
+        esp_zb_lock_acquire(portMAX_DELAY);
+        esp_zb_zcl_status_t status = esp_zb_zcl_set_attribute_val(HA_ESP_LIGHT_ENDPOINT,
+                                                                  ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
+                                                                  ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                                                  ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID,
+                                                                  &power,
+                                                                  false);
+        esp_zb_lock_release();
+
+        if (status != ESP_ZB_ZCL_STATUS_SUCCESS) {
+            ESP_LOGW(TAG, "Failed to update Zigbee on/off attribute (status: %d)", status);
+        }
+    }
 }
 
 static void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
@@ -85,11 +118,49 @@ static esp_err_t zb_attribute_handler(const esp_zb_zcl_set_attr_value_message_t 
             if (message->attribute.id == ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID && message->attribute.data.type == ESP_ZB_ZCL_ATTR_TYPE_BOOL) {
                 light_state = message->attribute.data.value ? *(bool *)message->attribute.data.value : light_state;
                 ESP_LOGI(TAG, "Light sets to %s", light_state ? "On" : "Off");
-                light_driver_set_power(light_state);
+                set_light_power(light_state, false);
             }
         }
     }
     return ret;
+}
+
+static void button_task(void *pvParameters)
+{
+    bool was_pressed = false;
+    bool long_press_handled = false;
+    TickType_t press_start = 0;
+
+    while (1) {
+        bool pressed = board_button_read();
+        TickType_t now = xTaskGetTickCount();
+
+        if (pressed && !was_pressed) {
+            press_start = now;
+            long_press_handled = false;
+        }
+
+        if (pressed && !long_press_handled &&
+            (now - press_start) >= pdMS_TO_TICKS(BUTTON_FACTORY_RESET_MS)) {
+            long_press_handled = true;
+            ESP_LOGW(TAG, "Factory reset requested by button long press");
+            esp_zb_lock_acquire(portMAX_DELAY);
+            esp_zb_factory_reset();
+            esp_zb_lock_release();
+        }
+
+        if (!pressed && was_pressed && !long_press_handled) {
+            TickType_t press_duration = now - press_start;
+            if (press_duration >= pdMS_TO_TICKS(BUTTON_DEBOUNCE_MS)) {
+                bool new_power = !light_driver_get_power();
+                ESP_LOGI(TAG, "Button short press toggles light to %s", new_power ? "On" : "Off");
+                set_light_power(new_power, true);
+            }
+        }
+
+        was_pressed = pressed;
+        vTaskDelay(pdMS_TO_TICKS(BUTTON_POLL_MS));
+    }
 }
 
 static esp_err_t zb_action_handler(esp_zb_core_action_callback_id_t callback_id, const void *message)
@@ -136,6 +207,7 @@ void app_main(void)
     };
 
     ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(board_button_init());
     ESP_ERROR_CHECK(diagnostics_init());
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
     ESP_LOGI(TAG, "Starting HA-IO C6 Zigbee on/off endpoint %d on GPIO %d",

@@ -3,11 +3,24 @@
 #include "light_driver.h"
 
 static const gpio_num_t s_light_gpio = CONFIG_EXAMPLE_LIGHT_GPIO;
+static bool s_light_power = false;
 
 void light_driver_set_power(bool power)
 {
+    s_light_power = power;
     gpio_set_level(s_light_gpio, power ? 1 : 0);
     ESP_LOGI("LIGHT_DRIVER", "Light %s", power ? "ON" : "OFF");
+}
+
+bool light_driver_get_power(void)
+{
+    return s_light_power;
+}
+
+bool light_driver_toggle(void)
+{
+    light_driver_set_power(!s_light_power);
+    return s_light_power;
 }
 
 void light_driver_init(bool power)
